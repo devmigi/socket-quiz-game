@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages li { padding: 5px 10px; }
+      #messages li:nth-child(odd) { background: #eee; }
+
+      #timer{
+          position: fixed;
+          right: 10px;
+          top: 10px;
+          font-size: 24px;
+          background: #666;
+          color: #fcfcfc;
+          display: inline-block;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          text-align: center;
+          line-height: 60px;
+      }
+    </style>
+  </head>
+  <body>
+    <ul id="messages">
+    </ul>
+
+    <span id="timer"></span>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+        $(function () {
+            var socket = io();
+            var userId = null;
+            var timer = null;
+
+            socket.on('connect', function () { // TIP: you can avoid listening on `connect` and listen on events directly too!
+                // get userid from storage
+                //var userId = localStorage.getItem('userId');
+                if(!userId){
+                    // create a random user hash
+                    userId = "user-" + new Date().getTime() +"-" + Math.floor(Math.random() * 1000);
+                }
+                socket.emit('new player', userId);
+            });
+
+            socket.on('game ready', function(gameId, players){
+                var msg = "Game started: " + players.player1 + " vs " + players.player2;
+                $('#messages').append($('<li>').text(msg));
+            });
+
+            socket.on('new question', function(question){
+                var htmlData = "<li class='question' data-qid='"+ question.id +"'>Question: " + question.question;
+                
+                question.options.forEach(option => {
+                    htmlData += "<div class='option' data-ans='"+ option +"'>" + option + "</div>";
+                });
+
+                htmlData += "</li>"
+
+                $('#messages').html(htmlData);
+
+                startTimer(question);
+            });
+
+            socket.on('check answer', function(data){
+                if(data.userId === userId){
+                    var result = "Wrong Answer!";
+                    if(data.correct){
+                        result = "Correct Answer!";
+                    }
+                    $('#messages').append($('<li>').text(result));
+                }
+            });
+
+            socket.on('game over', function(data){
+                console.log(data);
+                $("#messages").html("<li>GAME OVER</li>");
+            });
+
+
+            $(document).on("click", '.option', function(){
+                console.log("answerSelected");
+
+                var answerSelected = $(this).attr('data-ans');
+                var questionId = $(this).parent().attr('data-qid');
+                // console.log(answerSelected);
+                stopTimer();
+                socket.emit('answered', userId, questionId, answerSelected);
+            });
+
+            function startTimer(question){
+                var counter = 10;
+                $("#timer").show();
+
+                timer = setInterval(function(){ 
+                    $("#timer").text(counter);
+                    counter = counter-1;
+
+                    if(counter < 0){
+                        stopTimer();
+                        socket.emit('answer timeout', userId, question.id);
+                    }
+
+                 }, 1000);
+            }
+
+            function stopTimer(){
+                clearInterval(timer); // stop timer
+                $("#timer").text("");
+                $("#timer").hide();
+            }
+            
+        });
+    </script>
+  </body>
+</html>
